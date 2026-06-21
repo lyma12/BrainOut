@@ -64,7 +64,16 @@ public class StageController : MonoBehaviour
         }
 
         if (actions.Count > 0)
-            _executor.ExecuteActions(actions, new Dictionary<string, UnityEngine.GameObject>(), null);
+            _executor.ExecuteActions(actions, BuildTargetMap(), null);
+    }
+
+    private Dictionary<string, GameObject> BuildTargetMap()
+    {
+        var map = new Dictionary<string, GameObject>();
+        foreach (var t in FindObjectsOfType<ActionTargetID>())
+            if (!string.IsNullOrEmpty(t.ID))
+                map[t.ID] = t.gameObject;
+        return map;
     }
 
     public HashSet<string> GetFulfilledIDs()

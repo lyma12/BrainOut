@@ -1,5 +1,6 @@
 using UnityEditor;
 using UnityEditor.Experimental.GraphView;
+using UnityEditor.Search;
 using UnityEngine;
 using UnityEngine.UIElements;
 
@@ -52,19 +53,42 @@ public class ActionNodeView : Node
             Undo.RecordObject(_levelData, "Change Action Target");
             Data.Action.Target = (ActionTarget)evt.newValue;
             EditorUtility.SetDirty(_levelData);
+            BuildActionFields();
         });
         extensionContainer.Add(targetField);
 
         if (Data.Action.Target == ActionTarget.Other)
         {
-            var targetIDField = new TextField("Target ID") { value = Data.Action.TargetID ?? "" };
-            targetIDField.RegisterValueChangedCallback(evt =>
+            // Tìm lại GameObject đang hiển thị dựa trên TargetID đã lưu
+            GameObject currentTarget = null;
+            if (!string.IsNullOrEmpty(Data.Action.TargetID))
             {
-                Undo.RecordObject(_levelData, "Change Target ID");
-                Data.Action.TargetID = evt.newValue;
+                foreach (var t in Object.FindObjectsOfType<ActionTargetID>())
+                {
+                    if (t.ID == Data.Action.TargetID) { currentTarget = t.gameObject; break; }
+                }
+            }
+
+            var targetObjectField = new ObjectField("Object")
+            {
+                objectType = typeof(GameObject),
+                value = currentTarget
+            };
+            targetObjectField.RegisterValueChangedCallback(evt =>
+            {
+                Undo.RecordObject(_levelData, "Change Target Object");
+                var go = evt.newValue as GameObject;
+                var actionTargetID = go != null ? go.GetComponent<ActionTargetID>() : null;
+                if (go != null && actionTargetID == null)
+                {
+                    Debug.LogWarning($"[ActionNode] '{go.name}' không có component ActionTargetID. Hãy thêm vào và đặt ID.");
+                    targetObjectField.SetValueWithoutNotify(currentTarget);
+                    return;
+                }
+                Data.Action.TargetID = actionTargetID != null ? actionTargetID.ID : "";
                 EditorUtility.SetDirty(_levelData);
             });
-            extensionContainer.Add(targetIDField);
+            extensionContainer.Add(targetObjectField);
         }
 
         var delayField = new FloatField("Delay") { value = Data.Action.Delay };
