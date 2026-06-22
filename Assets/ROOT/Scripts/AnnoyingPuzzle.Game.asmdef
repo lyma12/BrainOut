@@ -1,0 +1,20 @@
+{
+    "name": "AnnoyingPuzzle.Game",
+    "rootNamespace": "ROOT.Scripts",
+    "references": [
+        "AnnoyingPuzzle.Data",
+        "LeanTouch",
+        "LeanCommon",
+        "com.adone.core.runtime",
+        "AdOne.Core.Runtime.Singleton"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
