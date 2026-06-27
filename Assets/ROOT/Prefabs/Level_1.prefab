@@ -55,8 +55,6 @@ SpriteRenderer:
   m_RayTracingAccelStructBuildFlagsOverride: 0
   m_RayTracingAccelStructBuildFlags: 1
   m_SmallMeshCulling: 1
-  m_ForceMeshLod: -1
-  m_MeshLodSelectionBias: 0
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
@@ -78,7 +76,6 @@ SpriteRenderer:
   m_AutoUVMaxDistance: 0.5
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
-  m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 36929649
   m_SortingLayer: 1
   m_SortingOrder: 0
@@ -166,7 +163,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: AnnoyingPuzzle.Game::ROOT.Scripts.DropZone
   _acceptedItemIDs: []
   _acceptOnce: 1
-  _snapPoint: {fileID: 0}
+  _snapPoint: {fileID: 618038699350905961}
   OnItemAccepted:
     m_PersistentCalls:
       m_Calls: []
@@ -293,8 +290,6 @@ SpriteRenderer:
   m_RayTracingAccelStructBuildFlagsOverride: 0
   m_RayTracingAccelStructBuildFlags: 1
   m_SmallMeshCulling: 1
-  m_ForceMeshLod: -1
-  m_MeshLodSelectionBias: 0
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
@@ -316,7 +311,6 @@ SpriteRenderer:
   m_AutoUVMaxDistance: 0.5
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
-  m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: -388023079
   m_SortingLayer: 2
   m_SortingOrder: 0
