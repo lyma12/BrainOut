@@ -6,7 +6,6 @@ public class LevelData : ScriptableObject
 {
     public string LevelName;
 
-    // Prefab instantiated when this level is loaded at runtime
     public GameObject LevelPrefab;
 
     public List<StageData> Stages = new List<StageData>();
@@ -14,13 +13,15 @@ public class LevelData : ScriptableObject
     public List<ActionConnectionData> ActionConnections = new List<ActionConnectionData>();
     public List<TransitionData> Transitions = new List<TransitionData>();
 
-    // Set by the Start node connection in the Level Editor
-    public string StartStageID;
+    // Requirement & gate nodes (replace per-stage requirement lists)
+    public List<RequirementNodeData> RequirementNodes = new List<RequirementNodeData>();
+    public List<LogicGateNodeData> LogicGateNodes = new List<LogicGateNodeData>();
+    public List<RequirementConnectionData> RequirementConnections = new List<RequirementConnectionData>();
+    public List<LogicGateConnectionData> LogicGateConnections = new List<LogicGateConnectionData>();
 
-    // Stages in this list trigger OnLevelComplete when they finish
+    public string StartStageID;
     public List<string> EndStageIDs = new List<string>();
 
-    // Positions of the Start / End anchor nodes in the graph
     public Vector2 StartNodePosition = new Vector2(50, 200);
     public Vector2 EndNodePosition   = new Vector2(700, 200);
 }

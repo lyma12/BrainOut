@@ -7,11 +7,9 @@ public class StageData
 {
     public string StageID;
     public string DisplayName;
-    public List<RequirementData> Requirements = new List<RequirementData>();
 
-    // ALL → every requirement must be fulfilled before actions/transitions fire
-    // ANY → the first fulfilled requirement is enough
-    public CompletionMode CompletionMode = CompletionMode.All;
+    // Requirements are now standalone RequirementNodeData nodes connected via LogicGate nodes.
+    // CompletionMode (AND/OR) is expressed by the connected LogicGateNodeData.GateType.
 
     public bool Sequential;
     [UnityEngine.SerializeReference] public List<ActionData> Actions = new List<ActionData>();

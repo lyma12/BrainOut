@@ -3,11 +3,8 @@ using UnityEngine;
 namespace ROOT.Scripts
 {
     /// <summary>
-    /// Base class cho mọi linker.
-    /// Subclass lắng nghe event từ interactable/action,
-    /// rồi gọi GamePlayController.FulfillRequirement(RequirementID).
-    ///
-    /// Designer điền RequirementID khớp với RequirementID trong LevelData.
+    /// Base class cho mọi requirement linker.
+    /// Data (RequirementID, v.v.) được editor bake trực tiếp vào prefab — không cần wire lúc runtime.
     /// </summary>
     public abstract class RequirementLinker : MonoBehaviour, IRequirement
     {

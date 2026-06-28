@@ -17,24 +17,39 @@ MonoBehaviour:
   Stages:
   - StageID: f8304d31-29c3-4f0e-b353-ff23c9fca8f9
     DisplayName: Stage 0
-    Requirements:
-    - RequirementID: DropAccepted_leaf1 (1)_776c2d
-      Type: 2
-      SourceObjectID: leaf1 (1)_776c2d
-      AcceptedDraggableIDs:
-      - leaf1_3f82ab
-    CompletionMode: 0
     Sequential: 0
     Actions: []
-    NodePosition: {x: 217.33333, y: -65.333336}
+    NodePosition: {x: 219.33333, y: -206}
   ActionNodes: []
   ActionConnections: []
   Transitions: []
+  RequirementNodes:
+  - NodeID: 92573d2c-2d16-4b7f-8c49-b38f822f0ac2
+    Data:
+      RequirementID: DropAccepted_leaf1 (1)_776c2d
+      Type: 1
+      ClickCount: 1
+      SourceObjectID: leaf1 (1)_776c2d
+      AcceptedSnappables: []
+      DropAcceptOnce: 1
+      DropLockOnAccept: 0
+      DropSnapPointID: 
+    NodePosition: {x: -253.33333, y: 14.666668}
+  LogicGateNodes:
+  - NodeID: bcd66e20-c7e2-437e-981b-5fe8fea9173f
+    GateType: 0
+    NodePosition: {x: -3.3333282, y: -60}
+  RequirementConnections:
+  - RequirementNodeID: 92573d2c-2d16-4b7f-8c49-b38f822f0ac2
+    LogicGateNodeID: bcd66e20-c7e2-437e-981b-5fe8fea9173f
+  LogicGateConnections:
+  - LogicGateNodeID: bcd66e20-c7e2-437e-981b-5fe8fea9173f
+    StageID: f8304d31-29c3-4f0e-b353-ff23c9fca8f9
   StartStageID: f8304d31-29c3-4f0e-b353-ff23c9fca8f9
   EndStageIDs:
   - f8304d31-29c3-4f0e-b353-ff23c9fca8f9
-  StartNodePosition: {x: 64.66667, y: 2.6666641}
-  EndNodePosition: {x: 496.6667, y: 2.6666641}
+  StartNodePosition: {x: -5.3333282, y: -206}
+  EndNodePosition: {x: 554.6667, y: -206}
   references:
     version: 2
     RefIds: []

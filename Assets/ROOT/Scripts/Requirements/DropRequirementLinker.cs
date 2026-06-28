@@ -1,16 +1,19 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace ROOT.Scripts
 {
     /// <summary>
     /// Fulfilled khi DropZone nhận đúng item.
-    /// Gắn vào cùng GameObject với DropZone.
-    /// Hoặc kéo DropZone vào field _dropZone.
+    /// _acceptedIDs và _lockOnAccept được editor bake vào từ RequirementData.
     /// </summary>
     public class DropRequirementLinker : RequirementLinker
     {
         [SerializeField] private DropZone _dropZone;
-        [SerializeField] private string _requiredItemID; // rỗng = chấp nhận bất kỳ item nào vào zone này
+        [SerializeField] private List<string> _acceptedIDs = new List<string>();
+
+        /// <summary>Khi true, item sẽ bị lock (IsInteractable = false) sau khi drop đúng.</summary>
+        [SerializeField] private bool _lockOnAccept = false;
 
         protected override void RegisterListeners()
         {
@@ -21,10 +24,18 @@ namespace ROOT.Scripts
                 _dropZone.OnItemAccepted.AddListener(OnItemDropped);
         }
 
-        private void OnItemDropped(Draggable draggable)
+        private void OnItemDropped(Snappable snappable)
         {
-            if (string.IsNullOrEmpty(_requiredItemID) || draggable.ItemID == _requiredItemID)
-                Fulfill();
+            if (_acceptedIDs != null && _acceptedIDs.Count > 0)
+            {
+                var targetID = snappable.GetComponent<ActionTargetID>();
+                if (targetID == null || !_acceptedIDs.Contains(targetID.ID)) return;
+            }
+
+            if (_lockOnAccept)
+                snappable.IsInteractable = false;
+
+            Fulfill();
         }
 
         protected override void OnReset()

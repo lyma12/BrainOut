@@ -6,12 +6,7 @@ public enum RequirementType
 {
     // ── Interaction ────────────────────────────────────────────────────────
     Clicked,            // Player tapped / clicked an object            (needs Clickable)
-    DragComplete,       // Player dragged object and released            (needs Draggable)
     DropAccepted,       // A draggable was dropped onto the zone         (needs DropZone)
-
-    // ── Time ───────────────────────────────────────────────────────────────
-    TimerExpired,       // Countdown timer reached zero                  (needs TimerTrigger)
-
     // ── Escape hatch ───────────────────────────────────────────────────────
     Custom,             // Manually fired by game code — ID is set by dev in SourceObjectID field
 }

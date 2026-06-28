@@ -1,4 +1,5 @@
 using System;
+using UnityEngine;
 
 namespace ROOT.Scripts
 {
@@ -20,5 +21,8 @@ namespace ROOT.Scripts
     public interface IInteractable
     {
         bool IsInteractable { get; set; }
+        public void OnClickDrown(Vector3 mouseWorld);
+        public void OnClickUp(Vector3 mouseWorld);
+        public void OnDrag(Vector3 mouseWorld);
     }
 }

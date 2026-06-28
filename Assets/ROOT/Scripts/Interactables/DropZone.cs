@@ -9,7 +9,7 @@ namespace ROOT.Scripts
     /// AcceptedItemIDs rỗng = chấp nhận tất cả.
     /// </summary>
     [RequireComponent(typeof(Collider2D))]
-    public class DropZone : MonoBehaviour, IInteractable
+    public class DropZone : MonoBehaviour
     {
         [Header("Config")]
         [SerializeField] private List<string> _acceptedItemIDs = new List<string>();
@@ -17,35 +17,59 @@ namespace ROOT.Scripts
         [SerializeField] private Transform _snapPoint;
 
         [Header("Events")]
-        public UnityEvent<Draggable> OnItemAccepted;
-        public UnityEvent<Draggable> OnItemRejected;
+        public UnityEvent<Snappable> OnItemAccepted;
+        public UnityEvent<Snappable> OnItemRejected;
 
         public bool IsInteractable { get; set; } = true;
         public Transform SnapPoint => _snapPoint;
-        public Draggable CurrentItem { get; private set; }
+        public Snappable CurrentItem { get; private set; }
         public bool HasItem => CurrentItem != null;
 
         private bool _isOccupied;
+        private UnityEngine.Events.UnityAction _liftedListener;
 
-        public bool TryAccept(Draggable draggable)
+        public bool TryAccept(Snappable snappable)
         {
             if (!IsInteractable) return false;
             if (_acceptOnce && _isOccupied) return false;
 
-            if (_acceptedItemIDs.Count > 0 && !_acceptedItemIDs.Contains(draggable.ItemID))
+            if (_acceptedItemIDs.Count > 0)
             {
-                OnItemRejected.Invoke(draggable);
-                return false;
+                var atid = snappable.GetComponent<ActionTargetID>();
+                if (atid == null || !_acceptedItemIDs.Contains(atid.ID))
+                {
+                    OnItemRejected.Invoke(snappable);
+                    return false;
+                }
             }
 
+            // Unsubscribe from previous item if any
+            if (CurrentItem != null)
+                CurrentItem.OnPickedUp.RemoveListener(HandleItemLifted);
+
             _isOccupied = _acceptOnce;
-            CurrentItem = draggable;
-            OnItemAccepted.Invoke(draggable);
+            CurrentItem = snappable;
+
+            // Auto-clear when the item is lifted back out
+            _liftedListener = HandleItemLifted;
+            snappable.OnPickedUp.AddListener(_liftedListener);
+
+            OnItemAccepted.Invoke(snappable);
             return true;
+        }
+
+        private void HandleItemLifted()
+        {
+            if (CurrentItem != null)
+                CurrentItem.OnPickedUp.RemoveListener(HandleItemLifted);
+            _isOccupied = false;
+            CurrentItem = null;
         }
 
         public void Clear()
         {
+            if (CurrentItem != null)
+                CurrentItem.OnPickedUp.RemoveListener(HandleItemLifted);
             _isOccupied = false;
             CurrentItem = null;
         }

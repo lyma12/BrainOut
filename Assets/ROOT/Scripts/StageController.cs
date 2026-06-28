@@ -15,12 +15,22 @@ public class StageController : MonoBehaviour
 
     public void Initialize(StageData data, LevelData levelData)
     {
-        Data = data;
+        Data       = data;
         _levelData = levelData;
         _fulfilled.Clear();
 
-        foreach (var req in data.Requirements)
-            _fulfilled[req.RequirementID] = false;
+        // Collect all requirements that feed into gates connected to this stage
+        foreach (var gateConn in levelData.LogicGateConnections)
+        {
+            if (gateConn.StageID != data.StageID) continue;
+            foreach (var reqConn in levelData.RequirementConnections)
+            {
+                if (reqConn.LogicGateNodeID != gateConn.LogicGateNodeID) continue;
+                var reqNode = levelData.RequirementNodes.Find(r => r.NodeID == reqConn.RequirementNodeID);
+                if (reqNode != null && !_fulfilled.ContainsKey(reqNode.Data.RequirementID))
+                    _fulfilled[reqNode.Data.RequirementID] = false;
+            }
+        }
 
         _executor = GetComponent<ActionExecutor>();
         if (_executor == null)
@@ -31,16 +41,6 @@ public class StageController : MonoBehaviour
     {
         if (!_fulfilled.ContainsKey(requirementID)) return;
         if (_fulfilled[requirementID]) return;
-
-        if (Data.Sequential)
-        {
-            int index = Data.Requirements.FindIndex(r => r.RequirementID == requirementID);
-            for (int i = 0; i < index; i++)
-            {
-                if (!_fulfilled[Data.Requirements[i].RequirementID])
-                    return;
-            }
-        }
 
         _fulfilled[requirementID] = true;
         OnRequirementFulfilled?.Invoke(requirementID);
@@ -53,11 +53,13 @@ public class StageController : MonoBehaviour
     {
         if (_levelData == null) return;
 
+        var reqNode = _levelData.RequirementNodes.Find(r => r.Data.RequirementID == requirementID);
+        if (reqNode == null) return;
+
         var actions = new List<ActionData>();
         foreach (var conn in _levelData.ActionConnections)
         {
-            if (conn.RequirementID != requirementID) continue;
-
+            if (conn.RequirementNodeID != reqNode.NodeID) continue;
             var nodeData = _levelData.ActionNodes.Find(n => n.ActionNodeID == conn.ActionNodeID);
             if (nodeData?.Action != null)
                 actions.Add(nodeData.Action);
@@ -86,25 +88,39 @@ public class StageController : MonoBehaviour
 
     private void CheckCompletion()
     {
-        bool complete = Data.CompletionMode == CompletionMode.Any
-            ? CheckAny()
-            : CheckAll();
-
-        if (complete)
+        if (EvaluateStageGates())
             OnStageComplete?.Invoke();
     }
 
-    private bool CheckAll()
+    /// <summary>Stage passes if at least one connected gate evaluates to true.</summary>
+    private bool EvaluateStageGates()
     {
-        foreach (var pair in _fulfilled)
-            if (!pair.Value) return false;
-        return true;
+        foreach (var gateConn in _levelData.LogicGateConnections)
+        {
+            if (gateConn.StageID != Data.StageID) continue;
+            var gate = _levelData.LogicGateNodes.Find(g => g.NodeID == gateConn.LogicGateNodeID);
+            if (gate != null && EvaluateGate(gate))
+                return true;
+        }
+        return false;
     }
 
-    private bool CheckAny()
+    private bool EvaluateGate(LogicGateNodeData gate)
     {
-        foreach (var pair in _fulfilled)
-            if (pair.Value) return true;
-        return false;
+        var reqConns = _levelData.RequirementConnections.FindAll(c => c.LogicGateNodeID == gate.NodeID);
+        if (reqConns.Count == 0) return false;
+
+        foreach (var reqConn in reqConns)
+        {
+            var reqNode = _levelData.RequirementNodes.Find(r => r.NodeID == reqConn.RequirementNodeID);
+            if (reqNode == null) continue;
+
+            bool done = _fulfilled.TryGetValue(reqNode.Data.RequirementID, out bool v) && v;
+
+            if (gate.GateType == LogicGateType.And && !done) return false;
+            if (gate.GateType == LogicGateType.Or  &&  done) return true;
+        }
+
+        return gate.GateType == LogicGateType.And;
     }
 }

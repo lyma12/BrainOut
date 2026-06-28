@@ -9,6 +9,9 @@ public class RequirementData
     // What kind of event fulfills this requirement
     public RequirementType Type;
 
+    // [Clicked only] Số lần click cần thiết để fulfill
+    public int ClickCount = 1;
+
     // ActionTargetID.ID of the primary source object:
     //   Clicked / DragComplete → the interactable object
     //   DropAccepted           → the drop zone
@@ -16,18 +19,25 @@ public class RequirementData
     //   Custom                 → set manually by dev
     public string SourceObjectID;
 
-    // [DropAccepted only] IDs of draggable objects that are allowed into this zone.
-    // Empty list = accept any draggable.
-    public List<string> AcceptedDraggableIDs = new List<string>();
+    // [DropAccepted only] Danh sách Snappable được chấp nhận, kèm config riêng.
+    // Empty = accept any snappable.
+    public List<SnappableEntryData> AcceptedSnappables = new List<SnappableEntryData>();
+
+    // [DropAccepted only] Zone chỉ nhận một item rồi đóng lại.
+    public bool DropAcceptOnce = true;
+
+    // [DropAccepted only] Nếu true, item bị lock (không kéo ra được) sau khi drop đúng.
+    public bool DropLockOnAccept = false;
+
+    // [DropAccepted only] ActionTargetID của transform dùng làm snap point.
+    public string DropSnapPointID = "";
 
     // The interaction mechanic that must be set up on SourceObjectID.
     // Derived automatically from Type — used by ComponentRequirementRegistry.
     public MechanicType MechanicType => Type switch
     {
         RequirementType.Clicked      => MechanicType.Click,
-        RequirementType.DragComplete => MechanicType.Draggable,
         RequirementType.DropAccepted => MechanicType.DropTarget,
-        RequirementType.TimerExpired => MechanicType.Timer,
         _                            => MechanicType.None,
     };
 

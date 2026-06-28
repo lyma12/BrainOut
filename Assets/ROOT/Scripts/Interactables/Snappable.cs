@@ -10,7 +10,7 @@ namespace ROOT.Scripts
     ///   ItemDown — picked up at least once but not placed in a valid DropZone
     /// </summary>
     [RequireComponent(typeof(Collider2D))]
-    public class Draggable : MonoBehaviour, IInteractable
+    public class Snappable : MonoBehaviour, IInteractable
     {
         private const string LayerStatic  = "Static";
         private const string LayerItemUp  = "Up";
@@ -19,6 +19,8 @@ namespace ROOT.Scripts
         [Header("Config")]
         [SerializeField] private string _itemID;
         [SerializeField] private bool _returnOnInvalidDrop = true;
+        [SerializeField] private LayerMask _dropZoneLayer = ~0;
+        [SerializeField] private float _snapDistance = 1f;
 
         [Header("Events")]
         public UnityEvent OnPickedUp;
@@ -37,10 +39,15 @@ namespace ROOT.Scripts
 
         private Vector3 _originPosition;
         private SpriteRenderer _spriteRenderer;
+        private ContactFilter2D _dropZoneFilter;
+        private readonly Collider2D[] _snapBuffer = new Collider2D[8];
 
         private void Awake()
         {
             _spriteRenderer = GetComponent<SpriteRenderer>();
+            _dropZoneFilter = new ContactFilter2D();
+            _dropZoneFilter.SetLayerMask(_dropZoneLayer);
+            _dropZoneFilter.useTriggers = true;
         }
 
         private void Start()
@@ -51,7 +58,7 @@ namespace ROOT.Scripts
 
         // ── API — called by InputController ──────────────────────────────────
 
-        public void OnBeginDrag(Vector3 worldPos)
+        public void OnClickDrown(Vector3 worldPos)
         {
             _originPosition  = transform.position;
             IsDragging       = true;
@@ -70,10 +77,11 @@ namespace ROOT.Scripts
             transform.position = pos;
         }
 
-        public void OnEndDrag(Vector3 worldPos, DropZone dropZone)
+        public void OnClickUp(Vector3 worldPos)
         {
             if (!IsDragging) return;
             IsDragging = false;
+            var dropZone = TrySnap(worldPos);
 
             if (dropZone != null && dropZone.TryAccept(this))
             {
@@ -99,6 +107,22 @@ namespace ROOT.Scripts
                 ApplyLayer(LayerItemDown);
                 OnDropped.Invoke();
             }
+        }
+
+        private DropZone TrySnap(Vector3 worldPos)
+        {
+            float threshold = _snapDistance * _snapDistance; // SqrMagnitude so sánh
+            int count = Physics2D.OverlapCircle(worldPos, _snapDistance, _dropZoneFilter, _snapBuffer);
+            DropZone best = null;
+            float bestDist = threshold;
+            for (int i = 0; i < count; i++)
+            {
+                var dz = _snapBuffer[i].GetComponent<DropZone>();
+                if (dz == null || !dz.IsInteractable) continue;
+                float dist = Vector2.SqrMagnitude((Vector2)worldPos - (Vector2)dz.transform.position);
+                if (dist < bestDist) { bestDist = dist; best = dz; }
+            }
+            return best;
         }
 
         public void ReturnToOrigin()

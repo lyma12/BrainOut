@@ -105,15 +105,16 @@ public class TransitionPopupWindow : PopupWindowContent
 
         GUILayout.Space(8);
         GUILayout.Label("Required Conditions (AND logic):", EditorStyles.boldLabel);
-        GUILayout.Label("All checked requirements must be done.", EditorStyles.miniLabel);
+        GUILayout.Label("All checked requirements must be fulfilled.", EditorStyles.miniLabel);
 
-        if (_fromStage != null && _fromStage.Requirements != null)
+        if (_levelData != null && _levelData.RequirementNodes != null && _levelData.RequirementNodes.Count > 0)
         {
-            foreach (var req in _fromStage.Requirements)
+            foreach (var reqNode in _levelData.RequirementNodes)
             {
+                var req = reqNode.Data;
                 bool isCond = _data.RequiredFulfilledIDs.Contains(req.RequirementID);
                 var label = string.IsNullOrEmpty(req.SourceObjectID)
-                    ? req.Type.ToString()
+                    ? $"{req.Type} [{reqNode.NodeID[..6]}]"
                     : $"{req.Type} ({req.SourceObjectID})";
                 bool newVal = EditorGUILayout.ToggleLeft(label, isCond);
                 if (newVal != isCond)
@@ -126,7 +127,7 @@ public class TransitionPopupWindow : PopupWindowContent
         }
         else
         {
-            GUILayout.Label("(No requirements in source stage)", EditorStyles.miniLabel);
+            GUILayout.Label("(No requirement nodes in level)", EditorStyles.miniLabel);
         }
 
         if (EditorGUI.EndChangeCheck())

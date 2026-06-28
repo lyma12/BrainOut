@@ -8,8 +8,10 @@ using UnityEngine.UIElements;
 public class LevelGraphView : GraphView
 {
     private LevelData _levelData;
-    private Dictionary<string, StageNodeView> _stageNodes  = new Dictionary<string, StageNodeView>();
-    private Dictionary<string, ActionNodeView> _actionNodes = new Dictionary<string, ActionNodeView>();
+    private Dictionary<string, StageNodeView>    _stageNodes       = new Dictionary<string, StageNodeView>();
+    private Dictionary<string, ActionNodeView>   _actionNodes      = new Dictionary<string, ActionNodeView>();
+    private Dictionary<string, RequiredNodeView> _requirementNodes = new Dictionary<string, RequiredNodeView>();
+    private Dictionary<string, LogicGateNodeView> _gateNodes       = new Dictionary<string, LogicGateNodeView>();
 
     private StartNodeView _startNode;
     private EndNodeView   _endNode;
@@ -37,45 +39,58 @@ public class LevelGraphView : GraphView
         _levelData = data;
         _stageNodes.Clear();
         _actionNodes.Clear();
+        _requirementNodes.Clear();
+        _gateNodes.Clear();
         _startNode = null;
         _endNode   = null;
 
         DeleteElements(graphElements);
         if (data == null) return;
 
-        // Start / End anchor nodes
         _startNode = new StartNodeView(data.StartNodePosition);
         _endNode   = new EndNodeView(data.EndNodePosition);
         AddElement(_startNode);
         AddElement(_endNode);
 
-        // Stage nodes
         foreach (var stage in data.Stages)
         {
             var node = CreateStageNodeView(stage);
             _stageNodes[stage.StageID] = node;
         }
 
-        // Action nodes
         foreach (var actionNode in data.ActionNodes)
         {
             var node = CreateActionNodeView(actionNode);
             _actionNodes[actionNode.ActionNodeID] = node;
         }
 
-        // Edges: requirement → action
+        foreach (var reqNode in data.RequirementNodes)
+        {
+            var node = CreateRequiredNodeView(reqNode);
+            _requirementNodes[reqNode.NodeID] = node;
+        }
+
+        foreach (var gateNode in data.LogicGateNodes)
+        {
+            var node = CreateLogicGateNodeView(gateNode);
+            _gateNodes[gateNode.NodeID] = node;
+        }
+
         foreach (var conn in data.ActionConnections)
             ConnectRequirementToAction(conn);
 
-        // Edges: stage → stage transitions
+        foreach (var conn in data.RequirementConnections)
+            ConnectRequirementToGate(conn);
+
+        foreach (var conn in data.LogicGateConnections)
+            ConnectGateToStage(conn);
+
         foreach (var transition in data.Transitions)
             ConnectStageToStage(transition);
 
-        // Edge: Start → first stage
         if (!string.IsNullOrEmpty(data.StartStageID) && _stageNodes.TryGetValue(data.StartStageID, out var startStage))
             ConnectStartToStage(startStage);
 
-        // Edges: stage → End
         foreach (var endID in data.EndStageIDs)
         {
             if (_stageNodes.TryGetValue(endID, out var endStage))
@@ -90,36 +105,67 @@ public class LevelGraphView : GraphView
         var result = new List<Port>();
         foreach (var port in ports)
         {
-            if (port == startPort) continue;
-            if (port.node == startPort.node) continue;
+            if (port == startPort || port.node == startPort.node) continue;
             if (port.direction == startPort.direction) continue;
 
-            bool startIsReq = startPort.userData is string;
-            bool endIsReq   = port.userData is string;
-
-            if (startIsReq || endIsReq)
+            // RequirementNode ports: Gate output → LogicGate, Action output → ActionNode
+            if (startPort.node is RequiredNodeView reqView)
             {
-                // Requirement output → ActionNode input only
-                if (!startIsReq || endIsReq) continue;
-                if (port.node is ActionNodeView) result.Add(port);
+                if (startPort == reqView.GateOutputPort)
+                {
+                    if (port.node is LogicGateNodeView lg && port == lg.InputPort)
+                        result.Add(port);
+                }
+                else if (startPort == reqView.ActionOutputPort)
+                {
+                    if (port.node is ActionNodeView)
+                        result.Add(port);
+                }
+                continue;
             }
-            else
+            if (port.node is RequiredNodeView reqView2)
             {
-                // Start → Stage
-                if (startPort.node is StartNodeView && port.node is StageNodeView)
-                { result.Add(port); continue; }
-                if (startPort.node is StageNodeView && port.node is StartNodeView)
-                { result.Add(port); continue; }
-
-                // Stage → End
-                if (startPort.node is StageNodeView && port.node is EndNodeView)
-                { result.Add(port); continue; }
-                if (startPort.node is EndNodeView && port.node is StageNodeView)
-                { result.Add(port); continue; }
-
-                // Stage → Stage transitions
-                if (startPort.node is StageNodeView && port.node is StageNodeView)
+                if (port == reqView2.GateOutputPort && startPort.node is LogicGateNodeView lg2 && startPort == lg2.InputPort)
                     result.Add(port);
+                else if (port == reqView2.ActionOutputPort && startPort.node is ActionNodeView)
+                    result.Add(port);
+                continue;
+            }
+
+            // LogicGate output → Stage ConditionInputPort
+            if (startPort.node is LogicGateNodeView || port.node is LogicGateNodeView)
+            {
+                var gatePort  = startPort.node is LogicGateNodeView ? startPort : port;
+                var otherPort = gatePort == startPort ? port : startPort;
+                if (gatePort.direction != Direction.Output) continue;
+                if (otherPort.node is StageNodeView sn && otherPort == sn.ConditionInputPort)
+                    result.Add(port);
+                continue;
+            }
+
+            // Transition connections: Start ↔ Stage, Stage ↔ Stage, Stage → End
+            if (startPort.node is StartNodeView)
+            {
+                if (port.node is StageNodeView sn2 && port == sn2.TransitionInputPort)
+                    result.Add(port);
+                continue;
+            }
+            if (startPort.node is StageNodeView sn3 && startPort == sn3.TransitionOutputPort)
+            {
+                if (port.node is StageNodeView sn4 && port == sn4.TransitionInputPort) { result.Add(port); continue; }
+                if (port.node is EndNodeView) { result.Add(port); continue; }
+                continue;
+            }
+            if (startPort.node is StageNodeView sn5 && startPort == sn5.TransitionInputPort)
+            {
+                if (port.node is StartNodeView) result.Add(port);
+                continue;
+            }
+            if (startPort.node is EndNodeView)
+            {
+                if (port.node is StageNodeView sn6 && port == sn6.TransitionOutputPort)
+                    result.Add(port);
+                continue;
             }
         }
         return result;
@@ -146,9 +192,11 @@ public class LevelGraphView : GraphView
             Undo.RecordObject(_levelData, "Remove Element");
             foreach (var el in change.elementsToRemove)
             {
-                if (el is Edge edge)             RemoveEdgeData(edge);
-                else if (el is StageNodeView sn) RemoveStageNode(sn);
-                else if (el is ActionNodeView an) RemoveActionNode(an);
+                if (el is Edge edge)                   RemoveEdgeData(edge);
+                else if (el is StageNodeView sn)       RemoveStageNode(sn);
+                else if (el is ActionNodeView an)      RemoveActionNode(an);
+                else if (el is RequiredNodeView rn)    RemoveRequirementNode(rn);
+                else if (el is LogicGateNodeView gn)   RemoveGateNode(gn);
             }
             EditorUtility.SetDirty(_levelData);
         }
@@ -158,10 +206,12 @@ public class LevelGraphView : GraphView
             Undo.RecordObject(_levelData, "Move Node");
             foreach (var el in change.movedElements)
             {
-                if (el is StageNodeView sn)       sn.Data.NodePosition = sn.GetPosition().position;
-                else if (el is ActionNodeView an) an.Data.NodePosition = an.GetPosition().position;
-                else if (el is StartNodeView)     _levelData.StartNodePosition = el.GetPosition().position;
-                else if (el is EndNodeView)       _levelData.EndNodePosition   = el.GetPosition().position;
+                if      (el is StageNodeView sn)       sn.Data.NodePosition      = sn.GetPosition().position;
+                else if (el is ActionNodeView an)      an.Data.NodePosition      = an.GetPosition().position;
+                else if (el is RequiredNodeView rn)    rn.Data.NodePosition      = rn.GetPosition().position;
+                else if (el is LogicGateNodeView gn)   gn.Data.NodePosition      = gn.GetPosition().position;
+                else if (el is StartNodeView)          _levelData.StartNodePosition = el.GetPosition().position;
+                else if (el is EndNodeView)            _levelData.EndNodePosition   = el.GetPosition().position;
             }
             EditorUtility.SetDirty(_levelData);
         }
@@ -171,13 +221,39 @@ public class LevelGraphView : GraphView
 
     private void ProcessNewEdge(Edge edge)
     {
-        // Requirement → Action
-        if (edge.output.userData is string requirementID && edge.input.node is ActionNodeView actionNode)
+        // Requirement Gate port → LogicGate
+        if (edge.output.node is RequiredNodeView reqNode
+            && edge.output == reqNode.GateOutputPort
+            && edge.input.node is LogicGateNodeView gateIn)
+        {
+            _levelData.RequirementConnections.Add(new RequirementConnectionData
+            {
+                RequirementNodeID = reqNode.Data.NodeID,
+                LogicGateNodeID   = gateIn.Data.NodeID
+            });
+            return;
+        }
+
+        // Requirement Action port → ActionNode
+        if (edge.output.node is RequiredNodeView reqNode2
+            && edge.output == reqNode2.ActionOutputPort
+            && edge.input.node is ActionNodeView actionNode)
         {
             _levelData.ActionConnections.Add(new ActionConnectionData
             {
-                RequirementID = requirementID,
-                ActionNodeID  = actionNode.Data.ActionNodeID
+                RequirementNodeID = reqNode2.Data.NodeID,
+                ActionNodeID      = actionNode.Data.ActionNodeID
+            });
+            return;
+        }
+
+        // Gate → Stage condition
+        if (edge.output.node is LogicGateNodeView gateOut && edge.input.node is StageNodeView stageIn)
+        {
+            _levelData.LogicGateConnections.Add(new LogicGateConnectionData
+            {
+                LogicGateNodeID = gateOut.Data.NodeID,
+                StageID         = stageIn.Data.StageID
             });
             return;
         }
@@ -213,11 +289,31 @@ public class LevelGraphView : GraphView
 
     private void RemoveEdgeData(Edge edge)
     {
-        // Requirement → Action
-        if (edge.output.userData is string requirementID && edge.input.node is ActionNodeView actionNode)
+        // Requirement Gate port → LogicGate
+        if (edge.output.node is RequiredNodeView reqNode
+            && edge.output == reqNode.GateOutputPort
+            && edge.input.node is LogicGateNodeView gateIn)
+        {
+            _levelData.RequirementConnections.RemoveAll(c =>
+                c.RequirementNodeID == reqNode.Data.NodeID && c.LogicGateNodeID == gateIn.Data.NodeID);
+            return;
+        }
+
+        // Requirement Action port → ActionNode
+        if (edge.output.node is RequiredNodeView reqNode2
+            && edge.output == reqNode2.ActionOutputPort
+            && edge.input.node is ActionNodeView actionNode)
         {
             _levelData.ActionConnections.RemoveAll(c =>
-                c.RequirementID == requirementID && c.ActionNodeID == actionNode.Data.ActionNodeID);
+                c.RequirementNodeID == reqNode2.Data.NodeID && c.ActionNodeID == actionNode.Data.ActionNodeID);
+            return;
+        }
+
+        // Gate → Stage condition
+        if (edge.output.node is LogicGateNodeView gateOut && edge.input.node is StageNodeView stageIn)
+        {
+            _levelData.LogicGateConnections.RemoveAll(c =>
+                c.LogicGateNodeID == gateOut.Data.NodeID && c.StageID == stageIn.Data.StageID);
             return;
         }
 
@@ -248,11 +344,10 @@ public class LevelGraphView : GraphView
         _levelData.Stages.Remove(node.Data);
         _levelData.Transitions.RemoveAll(t =>
             t.FromStageID == node.Data.StageID || t.ToStageID == node.Data.StageID);
+        _levelData.LogicGateConnections.RemoveAll(c => c.StageID == node.Data.StageID);
         _levelData.EndStageIDs.Remove(node.Data.StageID);
-
         if (_levelData.StartStageID == node.Data.StageID)
             _levelData.StartStageID = "";
-
         _stageNodes.Remove(node.Data.StageID);
     }
 
@@ -263,12 +358,31 @@ public class LevelGraphView : GraphView
         _actionNodes.Remove(node.Data.ActionNodeID);
     }
 
+    private void RemoveRequirementNode(RequiredNodeView node)
+    {
+        _levelData.RequirementNodes.Remove(node.Data);
+        _levelData.RequirementConnections.RemoveAll(c => c.RequirementNodeID == node.Data.NodeID);
+        _levelData.ActionConnections.RemoveAll(c => c.RequirementNodeID == node.Data.NodeID);
+        _requirementNodes.Remove(node.Data.NodeID);
+    }
+
+    private void RemoveGateNode(LogicGateNodeView node)
+    {
+        _levelData.LogicGateNodes.Remove(node.Data);
+        _levelData.RequirementConnections.RemoveAll(c => c.LogicGateNodeID == node.Data.NodeID);
+        _levelData.LogicGateConnections.RemoveAll(c => c.LogicGateNodeID == node.Data.NodeID);
+        _gateNodes.Remove(node.Data.NodeID);
+    }
+
     // ── Context menu ──────────────────────────────────────────────────────────
 
     private void BuildContextMenu(ContextualMenuPopulateEvent evt)
     {
-        evt.menu.AppendAction("Add Stage Node", a => AddStageNode(a.eventInfo.localMousePosition));
-        evt.menu.AppendAction("Add Action Node", a => AddActionNode(a.eventInfo.localMousePosition));
+        evt.menu.AppendAction("Add Stage Node",       a => AddStageNode(a.eventInfo.localMousePosition));
+        evt.menu.AppendAction("Add Action Node",      a => AddActionNode(a.eventInfo.localMousePosition));
+        evt.menu.AppendAction("Add Requirement Node", a => AddRequirementNode(a.eventInfo.localMousePosition));
+        evt.menu.AppendAction("Add AND Gate",         a => AddLogicGateNode(a.eventInfo.localMousePosition, LogicGateType.And));
+        evt.menu.AppendAction("Add OR Gate",          a => AddLogicGateNode(a.eventInfo.localMousePosition, LogicGateType.Or));
     }
 
     private void OnKeyDown(KeyDownEvent evt)
@@ -286,38 +400,61 @@ public class LevelGraphView : GraphView
     {
         if (_levelData == null) return;
         Undo.RecordObject(_levelData, "Add Stage Node");
-
         var data = new StageData
         {
             StageID      = Guid.NewGuid().ToString(),
             DisplayName  = "Stage " + _levelData.Stages.Count,
             NodePosition = position
         };
-
         _levelData.Stages.Add(data);
         EditorUtility.SetDirty(_levelData);
-
-        var node = CreateStageNodeView(data);
-        _stageNodes[data.StageID] = node;
+        _stageNodes[data.StageID] = CreateStageNodeView(data);
     }
 
     public void AddActionNode(Vector2 position)
     {
         if (_levelData == null) return;
         Undo.RecordObject(_levelData, "Add Action Node");
-
         var data = new ActionNodeData
         {
             ActionNodeID = Guid.NewGuid().ToString(),
             Action       = new ActionData { Type = ActionType.PlayAnimation },
             NodePosition = position
         };
-
         _levelData.ActionNodes.Add(data);
         EditorUtility.SetDirty(_levelData);
+        _actionNodes[data.ActionNodeID] = CreateActionNodeView(data);
+    }
 
-        var node = CreateActionNodeView(data);
-        _actionNodes[data.ActionNodeID] = node;
+    public void AddRequirementNode(Vector2 position)
+    {
+        if (_levelData == null) return;
+        Undo.RecordObject(_levelData, "Add Requirement Node");
+        var data = new RequirementNodeData
+        {
+            NodeID       = Guid.NewGuid().ToString(),
+            Data         = new RequirementData { Type = RequirementType.Clicked },
+            NodePosition = position
+        };
+        data.Data.RegenerateID();
+        _levelData.RequirementNodes.Add(data);
+        EditorUtility.SetDirty(_levelData);
+        _requirementNodes[data.NodeID] = CreateRequiredNodeView(data);
+    }
+
+    public void AddLogicGateNode(Vector2 position, LogicGateType gateType)
+    {
+        if (_levelData == null) return;
+        Undo.RecordObject(_levelData, "Add Logic Gate Node");
+        var data = new LogicGateNodeData
+        {
+            NodeID       = Guid.NewGuid().ToString(),
+            GateType     = gateType,
+            NodePosition = position
+        };
+        _levelData.LogicGateNodes.Add(data);
+        EditorUtility.SetDirty(_levelData);
+        _gateNodes[data.NodeID] = CreateLogicGateNodeView(data);
     }
 
     // ── Node factories ────────────────────────────────────────────────────────
@@ -338,20 +475,45 @@ public class LevelGraphView : GraphView
         return node;
     }
 
+    private RequiredNodeView CreateRequiredNodeView(RequirementNodeData data)
+    {
+        var node = new RequiredNodeView(data, _levelData);
+        node.SetPosition(new Rect(data.NodePosition, Vector2.zero));
+        AddElement(node);
+        return node;
+    }
+
+    private LogicGateNodeView CreateLogicGateNodeView(LogicGateNodeData data)
+    {
+        var node = new LogicGateNodeView(data, _levelData);
+        node.SetPosition(new Rect(data.NodePosition, Vector2.zero));
+        AddElement(node);
+        return node;
+    }
+
     // ── Edge helpers ──────────────────────────────────────────────────────────
 
     private void ConnectRequirementToAction(ActionConnectionData conn)
     {
-        Port outputPort = null;
-        foreach (var stageNode in _stageNodes.Values)
-        {
-            outputPort = stageNode.GetRequirementPort(conn.RequirementID);
-            if (outputPort != null) break;
-        }
-        if (outputPort == null) return;
+        if (!_requirementNodes.TryGetValue(conn.RequirementNodeID, out var reqNode)) return;
         if (!_actionNodes.TryGetValue(conn.ActionNodeID, out var actionNode)) return;
+        var edge = reqNode.ActionOutputPort.ConnectTo(actionNode.InputPort);
+        AddElement(edge);
+    }
 
-        var edge = outputPort.ConnectTo(actionNode.InputPort);
+    private void ConnectRequirementToGate(RequirementConnectionData conn)
+    {
+        if (!_requirementNodes.TryGetValue(conn.RequirementNodeID, out var reqNode)) return;
+        if (!_gateNodes.TryGetValue(conn.LogicGateNodeID, out var gateNode)) return;
+        var edge = reqNode.GateOutputPort.ConnectTo(gateNode.InputPort);
+        AddElement(edge);
+    }
+
+    private void ConnectGateToStage(LogicGateConnectionData conn)
+    {
+        if (!_gateNodes.TryGetValue(conn.LogicGateNodeID, out var gateNode)) return;
+        if (!_stageNodes.TryGetValue(conn.StageID, out var stageNode)) return;
+        var edge = gateNode.OutputPort.ConnectTo(stageNode.ConditionInputPort);
         AddElement(edge);
     }
 
@@ -359,7 +521,6 @@ public class LevelGraphView : GraphView
     {
         if (!_stageNodes.TryGetValue(transition.FromStageID, out var fromNode)) return;
         if (!_stageNodes.TryGetValue(transition.ToStageID,   out var toNode))   return;
-
         var edge = new TransitionEdgeView();
         edge.output = fromNode.TransitionOutputPort;
         edge.input  = toNode.TransitionInputPort;

@@ -38,13 +38,8 @@ namespace ROOT.Scripts
         [SerializeField] private Bounds _cameraBounds = new Bounds(Vector3.zero, new Vector3(20, 20, 0));
 
         // ── Drag state ──
-        private Draggable _activeDraggable;
+        private IInteractable _interactable;
         private LeanFinger _activeFinger;
-        private Vector3 _dragOffset;
-
-        // ── Click detection ──
-        private readonly Dictionary<int, Vector2> _fingerDownPositions = new Dictionary<int, Vector2>();
-        private const float ClickMaxMoveDelta = 10f;
 
         // ── Camera pan state ──
         private readonly Dictionary<int, Vector3> _panStartWorldPos = new Dictionary<int, Vector3>();
@@ -59,11 +54,15 @@ namespace ROOT.Scripts
 
         // ── Raycast buffer ──
         private readonly Collider2D[] _raycastBuffer = new Collider2D[16];
+        private ContactFilter2D _contactFilter;
 
         protected override void Init()
         {
             base.Init();
             if (_camera == null) _camera = Camera.main;
+            _contactFilter = new ContactFilter2D();
+            _contactFilter.SetLayerMask(_interactableLayer);
+            _contactFilter.useTriggers = true;
         }
 
         private void OnEnable()
@@ -93,28 +92,25 @@ namespace ROOT.Scripts
         {
             if (finger.IsOverGui) return;
 
-            _fingerDownPositions[finger.Index] = finger.ScreenPosition;
-
             int activeFingers = LeanTouch.Fingers.Count;
             // Thử drag object trước, bất kể số finger
-            if (_activeDraggable == null)
+            if (_interactable == null)
             {
-                var draggable = RaycastFirst<Draggable>(finger.ScreenPosition);
+                var draggable = RaycastFirst(finger.ScreenPosition);
                 if (draggable != null && draggable.IsInteractable)
                 {
-                    _activeDraggable = draggable;
+                    _interactable = draggable;
                     _activeFinger = finger;
 
-                    var worldPos = ScreenToWorld(finger.ScreenPosition, draggable.transform.position.z);
-                    _dragOffset = draggable.transform.position - worldPos;
-                    draggable.OnBeginDrag(worldPos + _dragOffset);
+                    var worldPos = ScreenToWorld(finger.ScreenPosition);
+                    draggable.OnClickDrown(worldPos);
                     return;
                 }
             }
 
             // Không có object → pan camera với finger này
-            if (_enablePan && _activeDraggable == null)
-                _panStartWorldPos[finger.Index] = ScreenToWorld(finger.ScreenPosition, _camera.transform.position.z);
+            if (_enablePan && _interactable == null)
+                _panStartWorldPos[finger.Index] = ScreenToWorld(finger.ScreenPosition);
 
             // Reset pinch khi thêm finger
             _lastPinchDist = -1f;
@@ -127,10 +123,10 @@ namespace ROOT.Scripts
 
             int activeFingers = LeanTouch.Fingers.Count;
             // Update drag object
-            if (_activeDraggable != null && _activeFinger?.Index == finger.Index)
+            if (_interactable != null && _activeFinger?.Index == finger.Index)
             {
-                var worldPos = ScreenToWorld(finger.ScreenPosition, _activeDraggable.transform.position.z);
-                _activeDraggable.OnDrag(worldPos + _dragOffset);
+                var worldPos = ScreenToWorld(finger.ScreenPosition);
+                _interactable.OnDrag(worldPos);
                 return;
             }
 
@@ -143,7 +139,7 @@ namespace ROOT.Scripts
             // Pan camera
             if (_enablePan && _panStartWorldPos.ContainsKey(finger.Index) && activeFingers == 1)
             {
-                var currentWorld = ScreenToWorld(finger.ScreenPosition, _camera.transform.position.z);
+                var currentWorld = ScreenToWorld(finger.ScreenPosition);
                 var startWorld = _panStartWorldPos[finger.Index];
                 var delta = startWorld - currentWorld;
 
@@ -151,36 +147,18 @@ namespace ROOT.Scripts
                 _camera.transform.position = ClampCameraPosition(newPos);
 
                 // Cập nhật lại start để pan mượt
-                _panStartWorldPos[finger.Index] = ScreenToWorld(finger.ScreenPosition, _camera.transform.position.z);
+                _panStartWorldPos[finger.Index] = ScreenToWorld(finger.ScreenPosition);
             }
         }
 
         private void HandleFingerUp(LeanFinger finger)
         {
-            // Click detection
-            if (_fingerDownPositions.TryGetValue(finger.Index, out var downPos))
-            {
-                _fingerDownPositions.Remove(finger.Index);
-                float moved = Vector2.Distance(downPos, finger.ScreenPosition);
-
-                if (moved <= ClickMaxMoveDelta)
-                {
-                    bool isDragFinger = _activeDraggable != null && _activeFinger?.Index == finger.Index;
-                    if (!isDragFinger)
-                    {
-                        var clickable = RaycastFirst<Clickable>(finger.ScreenPosition);
-                        clickable?.OnTap();
-                    }
-                }
-            }
-
             // End drag
-            if (_activeFinger?.Index == finger.Index && _activeDraggable != null)
+            if (_activeFinger?.Index == finger.Index && _interactable != null)
             {
-                var worldPos = ScreenToWorld(finger.ScreenPosition, _activeDraggable.transform.position.z);
-                var dropZone = RaycastFirst<DropZone>(finger.ScreenPosition);
-                _activeDraggable.OnEndDrag(worldPos, dropZone);
-                _activeDraggable = null;
+                var worldPos = ScreenToWorld(finger.ScreenPosition);
+                _interactable.OnClickUp(worldPos);
+                _interactable = null;
                 _activeFinger = null;
             }
 
@@ -253,17 +231,17 @@ namespace ROOT.Scripts
         // Helpers
         // ──────────────────────────────────────────────
 
-        private T RaycastFirst<T>(Vector2 screenPos) where T : Component
+        private IInteractable RaycastFirst(Vector2 screenPos)
         {
-            var worldPos = ScreenToWorld(screenPos, 0f);
-            int count = Physics2D.OverlapPointNonAlloc(worldPos, _raycastBuffer, _interactableLayer);
+            var worldPos = ScreenToWorld(screenPos);
+            int count = Physics2D.OverlapPoint(worldPos, _contactFilter, _raycastBuffer);
 
-            T best = null;
+            IInteractable best = null;
             int bestOrder = int.MinValue;
 
             for (int i = 0; i < count; i++)
             {
-                var component = _raycastBuffer[i].GetComponent<T>();
+                var component = _raycastBuffer[i].GetComponent<IInteractable>();
                 if (component == null) continue;
 
                 int order = _raycastBuffer[i].GetComponent<SpriteRenderer>()?.sortingOrder ?? 0;
@@ -273,10 +251,9 @@ namespace ROOT.Scripts
             return best;
         }
 
-        private Vector3 ScreenToWorld(Vector2 screenPos, float z)
+        private Vector3 ScreenToWorld(Vector2 screenPos)
         {
             var pos = _camera.ScreenToWorldPoint(new Vector3(screenPos.x, screenPos.y, _camera.nearClipPlane));
-            pos.z = z;
             return pos;
         }
 

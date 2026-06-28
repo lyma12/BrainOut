@@ -112,16 +112,6 @@ namespace ROOT.Scripts
             if (!_fulfilled.ContainsKey(requirementID)) return;
             if (_fulfilled[requirementID]) return;
 
-            if (_currentStage.Sequential)
-            {
-                int idx = _currentStage.Requirements.FindIndex(r => r.RequirementID == requirementID);
-                for (int i = 0; i < idx; i++)
-                {
-                    if (!_fulfilled.TryGetValue(_currentStage.Requirements[i].RequirementID, out bool done) || !done)
-                        return; // điều kiện trước chưa done, không accept
-                }
-            }
-
             _fulfilled[requirementID] = true;
 
             // Chạy action nodes kết nối với requirement này
@@ -137,8 +127,18 @@ namespace ROOT.Scripts
             _currentStage = stage;
             _fulfilled.Clear();
 
-            foreach (var req in stage.Requirements)
-                _fulfilled[req.RequirementID] = false;
+            // Collect requirements feeding gates connected to this stage
+            foreach (var gateConn in _levelData.LogicGateConnections)
+            {
+                if (gateConn.StageID != stage.StageID) continue;
+                foreach (var reqConn in _levelData.RequirementConnections)
+                {
+                    if (reqConn.LogicGateNodeID != gateConn.LogicGateNodeID) continue;
+                    var reqNode = _levelData.RequirementNodes.Find(r => r.NodeID == reqConn.RequirementNodeID);
+                    if (reqNode != null && !_fulfilled.ContainsKey(reqNode.Data.RequirementID))
+                        _fulfilled[reqNode.Data.RequirementID] = false;
+                }
+            }
 
             OnStageEntered.Invoke(stage.StageID);
 
@@ -158,10 +158,13 @@ namespace ROOT.Scripts
         {
             if (_levelData == null) { onComplete?.Invoke(); return; }
 
+            // Resolve RequirementID → RequirementNodeID, then find action connections
+            var reqNode = _levelData.RequirementNodes.Find(r => r.Data.RequirementID == requirementID);
             var nodeIDs = new List<string>();
-            foreach (var conn in _levelData.ActionConnections)
-                if (conn.RequirementID == requirementID)
-                    nodeIDs.Add(conn.ActionNodeID);
+            if (reqNode != null)
+                foreach (var conn in _levelData.ActionConnections)
+                    if (conn.RequirementNodeID == reqNode.NodeID)
+                        nodeIDs.Add(conn.ActionNodeID);
 
             if (nodeIDs.Count == 0) { onComplete?.Invoke(); return; }
 
@@ -185,27 +188,39 @@ namespace ROOT.Scripts
 
         private void CheckStageComplete()
         {
-            bool complete = _currentStage.CompletionMode == CompletionMode.Any
-                ? CheckAny()
-                : CheckAll();
-
-            if (!complete) return;
+            if (!EvaluateStageGates(_currentStage)) return;
             OnStageExited.Invoke(_currentStage.StageID);
             StartCoroutine(HandleTransition());
         }
 
-        private bool CheckAll()
+        /// <summary>Stage passes if at least one connected gate evaluates to true.</summary>
+        private bool EvaluateStageGates(StageData stage)
         {
-            foreach (var pair in _fulfilled)
-                if (!pair.Value) return false;
-            return true;
+            foreach (var gateConn in _levelData.LogicGateConnections)
+            {
+                if (gateConn.StageID != stage.StageID) continue;
+                var gate = _levelData.LogicGateNodes.Find(g => g.NodeID == gateConn.LogicGateNodeID);
+                if (gate != null && EvaluateGate(gate))
+                    return true;
+            }
+            return false;
         }
 
-        private bool CheckAny()
+        private bool EvaluateGate(LogicGateNodeData gate)
         {
-            foreach (var pair in _fulfilled)
-                if (pair.Value) return true;
-            return false;
+            var reqConns = _levelData.RequirementConnections.FindAll(c => c.LogicGateNodeID == gate.NodeID);
+            if (reqConns.Count == 0) return false;
+
+            foreach (var reqConn in reqConns)
+            {
+                var reqNode = _levelData.RequirementNodes.Find(r => r.NodeID == reqConn.RequirementNodeID);
+                if (reqNode == null) continue;
+                bool done = _fulfilled.TryGetValue(reqNode.Data.RequirementID, out bool v) && v;
+                if (gate.GateType == LogicGateType.And && !done) return false;
+                if (gate.GateType == LogicGateType.Or  &&  done) return true;
+            }
+
+            return gate.GateType == LogicGateType.And;
         }
 
         private IEnumerator HandleTransition()
